@@ -1,4 +1,5 @@
 import os
+import requests
 
 from flask import Flask, render_template, session, redirect, url_for
 from flask_bootstrap import Bootstrap
@@ -8,9 +9,18 @@ from wtforms import StringField, SelectField, SubmitField
 from wtforms.validators import DataRequired, Length
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+from dotenv import load_dotenv
 
+
+# ---------------------------------------------------------
+# CONFIGURAÇÕES INICIAIS
+# ---------------------------------------------------------
 
 basedir = os.path.abspath(os.path.dirname(__file__))
+
+# Carrega as variáveis do arquivo .env
+load_dotenv(os.path.join(basedir, '.env'))
+
 
 FUNCOES = (
     'Administrator',
@@ -21,12 +31,38 @@ FUNCOES = (
 
 app = Flask(__name__)
 
+
+# ---------------------------------------------------------
+# CONFIGURAÇÕES DO FLASK
+# ---------------------------------------------------------
+
 app.config['SECRET_KEY'] = 'hard to guess string'
+
 app.config['SQLALCHEMY_DATABASE_URI'] = (
     'sqlite:///' + os.path.join(basedir, 'data.sqlite')
 )
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+
+# ---------------------------------------------------------
+# CONFIGURAÇÕES DO MAILGUN
+# ---------------------------------------------------------
+
+app.config['API_KEY'] = os.environ.get('API_KEY')
+app.config['API_URL'] = os.environ.get('API_URL')
+app.config['API_FROM'] = os.environ.get('API_FROM')
+
+app.config['FLASKY_MAIL_SUBJECT_PREFIX'] = '[Flasky]'
+app.config['FLASKY_ADMIN'] = os.environ.get('FLASKY_ADMIN')
+
+app.config['ALUNO_NOME'] = os.environ.get('ALUNO_NOME')
+app.config['ALUNO_PRONTUARIO'] = os.environ.get('ALUNO_PRONTUARIO')
+
+
+# ---------------------------------------------------------
+# EXTENSÕES
+# ---------------------------------------------------------
 
 bootstrap = Bootstrap(app)
 moment = Moment(app)
@@ -34,11 +70,22 @@ db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
 
+# ---------------------------------------------------------
+# MODELOS
+# ---------------------------------------------------------
+
 class Role(db.Model):
     __tablename__ = 'roles'
 
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(64), unique=True)
+    id = db.Column(
+        db.Integer,
+        primary_key=True
+    )
+
+    name = db.Column(
+        db.String(64),
+        unique=True
+    )
 
     users = db.relationship(
         'User',
@@ -53,7 +100,10 @@ class Role(db.Model):
 class User(db.Model):
     __tablename__ = 'users'
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(
+        db.Integer,
+        primary_key=True
+    )
 
     username = db.Column(
         db.String(64),
@@ -69,6 +119,10 @@ class User(db.Model):
     def __repr__(self):
         return '<User %r>' % self.username
 
+
+# ---------------------------------------------------------
+# FORMULÁRIO
+# ---------------------------------------------------------
 
 class NameForm(FlaskForm):
 
@@ -91,13 +145,116 @@ class NameForm(FlaskForm):
             ('Moderator', 'Moderator'),
             ('User', 'User')
         ],
-        validators=[DataRequired()]
+        validators=[
+            DataRequired()
+        ]
     )
 
-    submit = SubmitField('Submit')
+    submit = SubmitField(
+        'Submit'
+    )
 
+
+# ---------------------------------------------------------
+# MAILGUN
+# ---------------------------------------------------------
+
+def enviar_email_novo_usuario(usuario):
+
+    api_url = app.config['API_URL']
+    api_key = app.config['API_KEY']
+    remetente = app.config['API_FROM']
+
+    email_aluno = app.config['FLASKY_ADMIN']
+    nome_aluno = app.config['ALUNO_NOME']
+    prontuario = app.config['ALUNO_PRONTUARIO']
+
+    if not api_url:
+        raise RuntimeError(
+            'API_URL não configurada.'
+        )
+
+    if not api_key:
+        raise RuntimeError(
+            'API_KEY não configurada.'
+        )
+
+    if not remetente:
+        raise RuntimeError(
+            'API_FROM não configurado.'
+        )
+
+    if not email_aluno:
+        raise RuntimeError(
+            'FLASKY_ADMIN não configurado.'
+        )
+
+    corpo = f"""
+Novo usuário cadastrado na aplicação Flask.
+
+Aluno responsável:
+Nome: {nome_aluno}
+Prontuário: {prontuario}
+
+Usuário cadastrado:
+Nome: {usuario.username}
+Função: {usuario.role.name}
+"""
+
+    dados = [
+        (
+            'from',
+            remetente
+        ),
+        (
+            'to',
+            'flaskaulasweb@zohomail.com'
+        ),
+        (
+            'to',
+            email_aluno
+        ),
+        (
+            'subject',
+            f"{app.config['FLASKY_MAIL_SUBJECT_PREFIX']} Novo usuário cadastrado"
+        ),
+        (
+            'text',
+            corpo
+        )
+    ]
+
+    resposta = requests.post(
+        api_url,
+        auth=(
+            'api',
+            api_key
+        ),
+        data=dados,
+        timeout=15
+    )
+
+    print(
+        'Mailgun Status:',
+        resposta.status_code
+    )
+
+    print(
+        'Mailgun Resposta:',
+        resposta.text
+    )
+
+    resposta.raise_for_status()
+
+    return resposta
+
+
+# ---------------------------------------------------------
+# BANCO DE DADOS
+# ---------------------------------------------------------
 
 def preparar_banco():
+
     db.create_all()
 
     for nome_funcao in FUNCOES:
@@ -107,8 +264,11 @@ def preparar_banco():
         ).first()
 
         if funcao is None:
+
             db.session.add(
-                Role(name=nome_funcao)
+                Role(
+                    name=nome_funcao
+                )
             )
 
     db.session.flush()
@@ -122,6 +282,7 @@ def preparar_banco():
     ).all()
 
     for usuario in usuarios_sem_funcao:
+
         usuario.role = funcao_user
 
     db.session.commit()
@@ -130,6 +291,10 @@ def preparar_banco():
 with app.app_context():
     preparar_banco()
 
+
+# ---------------------------------------------------------
+# SHELL
+# ---------------------------------------------------------
 
 @app.shell_context_processor
 def make_shell_context():
@@ -141,6 +306,10 @@ def make_shell_context():
     }
 
 
+# ---------------------------------------------------------
+# COMANDO PARA INICIALIZAR BANCO
+# ---------------------------------------------------------
+
 @app.cli.command('init-db')
 def init_db():
 
@@ -150,6 +319,10 @@ def init_db():
         'Banco pronto. Cadastros existentes preservados.'
     )
 
+
+# ---------------------------------------------------------
+# ERROS
+# ---------------------------------------------------------
 
 @app.errorhandler(404)
 def page_not_found(e):
@@ -167,6 +340,10 @@ def internal_server_error(e):
     ), 500
 
 
+# ---------------------------------------------------------
+# PÁGINA PRINCIPAL
+# ---------------------------------------------------------
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
 
@@ -182,6 +359,10 @@ def index():
             name=form.role.data
         ).first()
 
+        # -------------------------------------------------
+        # NOVO USUÁRIO
+        # -------------------------------------------------
+
         if user is None:
 
             user = User(
@@ -191,21 +372,54 @@ def index():
 
             db.session.add(user)
 
+            # Salva temporariamente para termos acesso
+            # ao usuário antes do commit
+            db.session.flush()
+
+            try:
+
+                enviar_email_novo_usuario(
+                    user
+                )
+
+            except Exception as erro:
+
+                db.session.rollback()
+
+                print(
+                    'Erro ao enviar e-mail:',
+                    erro
+                )
+
+                raise
+
+            db.session.commit()
+
             session['known'] = False
+
+        # -------------------------------------------------
+        # USUÁRIO JÁ EXISTENTE
+        # -------------------------------------------------
 
         else:
 
             user.role = role
 
+            db.session.commit()
+
             session['known'] = True
 
-        db.session.commit()
 
         session['name'] = form.name.data
 
         return redirect(
             url_for('index')
         )
+
+
+    # -----------------------------------------------------
+    # LISTAGEM DOS USUÁRIOS
+    # -----------------------------------------------------
 
     users = User.query.order_by(
         User.id
@@ -226,14 +440,19 @@ def index():
             ).all()
         })
 
+
     quantidade_usuarios = User.query.count()
     quantidade_funcoes = Role.query.count()
+
 
     return render_template(
         'index.html',
         form=form,
         name=session.get('name'),
-        known=session.get('known', False),
+        known=session.get(
+            'known',
+            False
+        ),
         users=users,
         roles=roles,
         quantidade_usuarios=quantidade_usuarios,
@@ -241,5 +460,10 @@ def index():
     )
 
 
+# ---------------------------------------------------------
+# EXECUÇÃO
+# ---------------------------------------------------------
+
 if __name__ == '__main__':
+
     app.run()
