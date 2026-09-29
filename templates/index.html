@@ -2,8 +2,9 @@
 {% import "bootstrap/wtf.html" as wtf %}
 
 {% block title %}
-Semana 09 - Bancos de dados
+Semana 11.A - E-mail
 {% endblock %}
+
 
 {% block page_content %}
 
@@ -40,10 +41,12 @@ Semana 09 - Bancos de dados
 <table class="table">
 
     <thead>
+
         <tr>
             <th>Nome do usuário</th>
             <th>Função</th>
         </tr>
+
     </thead>
 
     <tbody>
@@ -51,23 +54,35 @@ Semana 09 - Bancos de dados
         {% for user in users %}
 
         <tr>
-            <td>{{ user.username }}</td>
 
             <td>
-                {% if user.role %}
-                    {{ user.role.name }}
-                {% else %}
-                    Sem função
-                {% endif %}
+                {{ user.username }}
             </td>
+
+            <td>
+
+                {% if user.role %}
+
+                    {{ user.role.name }}
+
+                {% else %}
+
+                    Sem função
+
+                {% endif %}
+
+            </td>
+
         </tr>
 
         {% else %}
 
         <tr>
+
             <td colspan="2">
                 Nenhum usuário cadastrado.
             </td>
+
         </tr>
 
         {% endfor %}
@@ -87,10 +102,12 @@ Semana 09 - Bancos de dados
 <table class="table">
 
     <thead>
+
         <tr>
             <th>Funções</th>
             <th>Usuários</th>
         </tr>
+
     </thead>
 
     <tbody>
@@ -107,15 +124,21 @@ Semana 09 - Bancos de dados
 
                 {% if role.users %}
 
-                <ol>
-                    {% for user in role.users %}
-                    <li>{{ user.username }}</li>
-                    {% endfor %}
-                </ol>
+                    <ol>
+
+                        {% for user in role.users %}
+
+                            <li>
+                                {{ user.username }}
+                            </li>
+
+                        {% endfor %}
+
+                    </ol>
 
                 {% else %}
 
-                Nenhum usuário cadastrado.
+                    Nenhum usuário cadastrado.
 
                 {% endif %}
 
@@ -128,5 +151,6 @@ Semana 09 - Bancos de dados
     </tbody>
 
 </table>
+
 
 {% endblock %}
